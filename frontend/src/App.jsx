@@ -70,7 +70,7 @@ function App() {
         {/* Header */}
         <header className="flex items-center justify-between py-4">
           <a href="https://github.com/ANKVIT26" target="_blank" rel="noopener noreferrer" className="block">
-            <h1 className={`text-4xl font-bold transition-colors ${darkMode ? 'text-cyan-300 hover:text-cyan-400' : 'text-blue-500 hover:text-blue-600'}`}>Chat AI</h1>
+            <h1 className={`text-4xl font-bold transition-colors ${darkMode ? 'text-cyan-300 hover:text-cyan-400' : 'text-blue-500 hover:text-blue-600'}`}>NodeMesh AI</h1>
           </a>
           <button
             className={`ml-4 px-4 py-2 rounded-lg font-semibold shadow-md transition-all duration-200 focus:outline-none darkmode-toggle ${darkMode ? 'bg-gray-700 text-cyan-200 hover:bg-gray-600' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
@@ -95,10 +95,10 @@ function App() {
                   I'm here to help you with anything you'd like to know.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">💡</span> General knowledge </div>
+                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">💡</span> Intent Based </div>
                   <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">🔧</span> Bhagwad Gita Shloks </div>
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">📝</span> Writing assistance </div>
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">🤔</span> Technical questions </div>
+                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">📝</span> General knowledge </div>
+                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">🤔</span> Sarcasm Friendly </div>
                 </div>
               </div>
             </div>
