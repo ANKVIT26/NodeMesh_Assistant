@@ -8,11 +8,11 @@ dotenv.config();
 // --- 1. STARTUP CHECKS ---
 console.log('--- Checking Environment Variables ---');
 const apiKeyFromEnv = process.env.GEMINI_API_KEY;
-if (apiKeyFromEnv) {
-  console.log(`GEMINI_API_KEY found. Ends with: ${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)}`);
-} else {
-  console.error('CRITICAL: GEMINI_API_KEY is missing!');
-}
+// if (apiKeyFromEnv) {
+//   console.log(`GEMINI_API_KEY found. Ends with: ${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)}`);
+// } else {
+//   console.error('CRITICAL: GEMINI_API_KEY is missing!');
+// }
 
 const app = express();
 const PORT = process.env.PORT || 3001;
