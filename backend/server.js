@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 3001;
 // Context Memory for Location (Persists until server restart)
 let lastContextLocation = null; 
 
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'; 
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'; 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
