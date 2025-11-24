@@ -51,20 +51,45 @@ Prompt engineering is reflected in how each query is structured and routed, ensu
 ## Testing the APIs
 Use Postman to test backend endpoints by importing the API sample code/ pasting it in the raw format area and request using "POST" with your API Key to verify the working.
 
-## 🛠️ Setup Instructions
-1. Install dependencies- npm install
-2. Create .env file-
-GEMINI_API_KEY=your_gemini_key
-WEATHER_API_KEY=your_weather_key
-NEWS_API_KEY=your_newsapi_key
+### 🛠 Setup Instructions
 
-3. Start backend Server- npm run server
-4. Start the Frontend- npm run dev
-
-5. Clone the repo:
+1. **Clone the repo**
    ```bash
-   git clone https://github.com/ANKVIT26/Chat_AI.git
-   cd Chat_AI
+   git clone https://github.com/ANKVIT26/NodeMesh_Assistant.git
+   cd NodeMesh_Assistant
+   ```
+
+2. **Install dependencies**
+   - The project has both **frontend** and **backend** folders.
+   - Run:
+     ```bash
+     npm install
+     ```
+     inside each folder (`frontend` and `backend`).
+
+3. **Create `.env` file**
+   - In the root or backend folder, add a `.env` file with your API keys:
+     ```env
+     GEMINI_API_KEY=your_gemini_key
+     WEATHER_API_KEY=your_weather_key
+     NEWS_API_KEY=your_newsapi_key
+     ```
+
+4. **Start the backend server**
+   ```bash
+   npm run server
+   ```
+
+5. **Start the frontend**
+   ```bash
+   npm run dev
+   ```
+   - This launches the React + Vite frontend with hot reload.
+### ⚡ Tech Stack Recap
+- **Frontend:** React, Vite, Tailwind CSS  
+- **Backend:** Node.js, Express  
+- **APIs:** Gemini Flash 2.0, WeatherAPI, NewsAPI  
+- **Dev Tools:** Postman, ESLint, dotenv  
 
 <img width="1919" height="877" alt="image" src="https://github.com/user-attachments/assets/c73c171f-e4ce-4302-99ca-00b094d5e0da" />
 
@@ -73,7 +98,7 @@ NEWS_API_KEY=your_newsapi_key
 https://drive.google.com/file/d/1Z-AfodYTV25SY84mCoV4Bwn10EC85z0G/view?usp=sharing
 
 
-# React + Vite
+# React + Vite(Official guide template)
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
