@@ -91,8 +91,7 @@ Use Postman to test backend endpoints by importing the API sample code/ pasting 
 - **APIs:** Gemini Flash 2.0, WeatherAPI, NewsAPI  
 - **Dev Tools:** Postman, ESLint, dotenv  
 
-<img width="1919" height="877" alt="image" src="<img width="1901" height="877" alt="image" src="https://github.com/user-attachments/assets/474837de-cef8-4baa-a5f5-e3270a6d88fa" />
-" />
+<img width="1919" height="877" alt="image" src="<img width="1901" height="877" alt="image" src="https://github.com/user-attachments/assets/474837de-cef8-4baa-a5f5-e3270a6d88fa" />">
 
 
 #DEMO VIDEO
