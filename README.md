@@ -1,11 +1,11 @@
-# 🤖 ChatBot — AI-Powered Intent-Based Assistant
+# 🤖 NodeMesh — AI-Powered Intent-Based Assistant
 
-ChatBot is a responsive AI assistant built using **React + Vite** on the frontend and a modular **Node.js/Express.js backend**. It intelligently routes user queries based on intent—leveraging **Gemini Flash 2.0**, **WeatherAPI**, and **NewsAPI** to deliver accurate, real-time responses.
+NodeMesh is a responsive AI assistant built using **React + Vite** on the frontend and a modular **Node.js/Express.js backend**. It intelligently routes user queries based on intent—leveraging **Gemini Flash 2.0**, **WeatherAPI**, and **NewsAPI** to deliver accurate, real-time responses.
 
 
 ## 🚀 Features
 
-- **Sarcasm,Intent-Based Query Handling**  
+- **Sarcasm, Intent-Based Query Handling**  
   Automatically detects user intent or sarcasm across:
   - `general`/`sarcasm` → Gemini Flash 2.0
   - `weather`, `rain`, `alert` → WeatherMap API
