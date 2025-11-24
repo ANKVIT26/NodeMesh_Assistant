@@ -6,13 +6,14 @@ import axios from 'axios';
 dotenv.config();
 
 // --- 1. STARTUP CHECKS ---
-console.log('--- Checking Environment Variables ---');
+console.log('--- Checking Environment Variables on STARTUP ---');
 const apiKeyFromEnv = process.env.GEMINI_API_KEY;
-// if (apiKeyFromEnv) {
-//   console.log(`GEMINI_API_KEY found. Ends with: ${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)}`);
-// } else {
-//   console.error('CRITICAL: GEMINI_API_KEY is missing!');
-// }
+if (apiKeyFromEnv) {
+  console.log(`GEMINI_API_KEY found. Ends with: ${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)}`);
+} else {
+  console.error('CRITICAL: GEMINI_API_KEY is missing!');
+}
+console.log('--- End Startup Check ---');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -20,6 +21,7 @@ const PORT = process.env.PORT || 3001;
 // Context Memory for Location (Persists until server restart)
 let lastContextLocation = null; 
 
+// --- MODEL CONFIGURATION ---
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'; 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
@@ -37,7 +39,6 @@ app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
-      // return callback(null, true); // Uncomment for dev
       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
       return callback(new Error(msg), false);
     }
@@ -64,14 +65,14 @@ function extractJson(text) {
   }
 }
 
-// --- CALL GEMINI (HANDLES HISTORY CONTEXT) ---
 async function callGemini(input, model = GEMINI_MODEL) {
   if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
 
+  // Fallback List: Tries 2.5 -> 2.0 -> 1.5
   const modelsToTry = [model, 'gemini-2.0-flash', 'gemini-1.5-flash'];
   let lastError;
 
-  // Determine payload: Array (History) or String (Single Prompt)
+  // Input handling: Array (History) vs String (Prompt)
   let contents = [];
   if (Array.isArray(input)) {
     contents = input; 
@@ -99,7 +100,9 @@ async function callGemini(input, model = GEMINI_MODEL) {
     } catch (error) {
       lastError = error;
       const status = error.response?.status;
-      if (status !== 429 && status !== 503) break; 
+      // 404 = Model not found (e.g. if 2.5 isn't released in your region yet)
+      // 503 = Server overloaded
+      if (status !== 429 && status !== 503 && status !== 404) break; 
       console.warn(`Model ${m} failed (${status}). Retrying fallback...`);
     }
   }
@@ -170,9 +173,8 @@ async function getGitaSupport(userMessage) {
   } catch (error) { return null; }
 }
 
-// --- 5. HANDLERS ---
-
-async function handleWeather(location, activity) {
+// --- UPDATED WEATHER HANDLER (With History Context) ---
+async function handleWeather(location, activity, history = []) {
   if (!WEATHER_API_KEY) return 'Weather service is not configured.';
   
   let queryLocation = location;
@@ -210,14 +212,27 @@ async function handleWeather(location, activity) {
                    `💨 **Wind:** ${c.wind_kph} km/h ${c.wind_dir}\n` +
                    `🌅 **Sunrise:** ${astro?.sunrise || 'N/A'} | 🌇 **Sunset:** ${astro?.sunset || 'N/A'}`;
 
+    // If user asks for activity advice (fishing, outing, etc.)
     if (activity) {
-        const advicePrompt = `
-        User wants to know if it's good for: "${activity}".
-        Weather: ${c.condition.text}, ${c.temp_c}C, Wind ${c.wind_kph}kph, Humidity ${c.humidity}%.
-        Provide a recommendation starting with "✅ Yes", "❌ No", or "⚠️ Maybe" and explain why based on the data.`;
+        // 1. Construct System Prompt with Real Data
+        const systemContext = `
+        You are a weather activity advisor. 
+        Current Weather in ${loc.name}: ${c.condition.text}, ${c.temp_c}C, Wind ${c.wind_kph}kph, Humidity ${c.humidity}%.
+        
+        The user asks about: "${activity}".
+        Based on the data, provide a recommendation starting with "✅ Yes", "❌ No", or "⚠️ Maybe".
+        `;
+
+        // 2. Combine with Chat History (Context of last 6 messages)
+        const conversation = [
+            { role: "user", parts: [{ text: `System Context: ${systemContext}` }] },
+            { role: "model", parts: [{ text: "Understood. I will advise based on this weather." }] },
+            ...history, // Insert chat history here
+            { role: "user", parts: [{ text: `Is it good for ${activity}?` }] }
+        ];
         
         try {
-            const advice = await callGemini(advicePrompt);
+            const advice = await callGemini(conversation);
             response += `\n\n**Activity Outlook (${activity}):**\n${advice}`;
         } catch (e) { response += `\n\n(Could not generate specific advice for ${activity})`; }
     }
@@ -262,31 +277,41 @@ async function handleNews(topic, originalMessage) {
     } catch (e) { return "Sorry, I couldn't fetch the news right now."; }
 }
 
-// --- UPDATED GENERAL HANDLER WITH CONTEXT MEMORY ---
+// --- UPDATED GENERAL HANDLER (With Memory) ---
 async function handleGeneralResponse(userMessage, history = []) {
   const lower = userMessage.toLowerCase();
+  
+  // 1. Failsafe: Distress/Gita Check
   const distressKeywords = [
     'worried', 'worry', 'anxious', 'anxiety', 'sad', 'depressed', 'scared', 
     'fear', 'stress', 'tired', 'burnout', 'fail', 'failure', 'exam', 'results', 'sleep', 'lost'
   ];
   const hasDistressKeyword = distressKeywords.some(word => lower.includes(word));
 
+  // 2. Creative Mode Check
+  const creativeKeywords = ['write', 'essay', 'story', 'poem', 'blog', 'article', 'code', 'script', 'generate', 'detailed', 'explain', 'cover letter'];
+  const isCreativeMode = creativeKeywords.some(word => lower.includes(word));
+
+  // 3. Concurrent Analysis
   let sarcasmResult = null;
   let sentimentResult = { is_low_mood: hasDistressKeyword };
 
   if (!DISABLE_GEMINI) {
     const tasks = [analyzeSarcasm(userMessage)];
-    if (!hasDistressKeyword) tasks.push(analyzeSentiment(userMessage));
+    if (!hasDistressKeyword && !isCreativeMode) tasks.push(analyzeSentiment(userMessage));
 
     try {
       const results = await Promise.all(tasks);
       sarcasmResult = results[0];
-      if (!hasDistressKeyword && results[1]) sentimentResult = results[1];
+      if (!hasDistressKeyword && !isCreativeMode && results[1]) {
+          sentimentResult = results[1];
+      }
     } catch (e) { console.error("Analysis failed", e); }
   }
 
-  // 1. PRIORITY: Gita Support (Emotional Failsafe)
-  if (sentimentResult?.is_low_mood) {
+  // 4. Priority 1: Gita Support
+  if (sentimentResult?.is_low_mood && !isCreativeMode) {
+    console.log(">> Low mood detected. Fetching Gita wisdom...");
     const gitaData = await getGitaSupport(userMessage);
     if (gitaData) {
       return `I sense you might be going through a tough moment. Here is some timeless wisdom from the Bhagavad Gita:\n\n` +
@@ -296,38 +321,35 @@ async function handleGeneralResponse(userMessage, history = []) {
     }
   }
 
-  // 2. PRIORITY: General Assistant (With Memory)
+  // 5. Priority 2: General Assistant (With Creative + Memory)
   let systemText = "";
   if (isCreativeMode) {
-      console.log(">> Creative Mode Triggered");
-      systemText = `You are NodeMesh, a creative and detailed AI assistant. 
-      The user has requested long-form content (essay, code, story). 
-      Provide a comprehensive, well-structured, and detailed response. 
-      Do not be concise. Expand on the topic.`;
+      systemText = `You are NodeMesh, a creative and detailed AI assistant. Provide comprehensive responses.`;
   } else {
-      systemText = `You are NodeMesh, a helpful AI assistant. Answer concisely and directly.`;
+      systemText = `You are NodeMesh, a helpful AI assistant. Answer concisely.`;
   }
+
   if (sarcasmResult?.is_sarcastic) {
     systemText += `\nCONTEXT: The user is being sarcastic (Intended: "${sarcasmResult.intended_meaning}"). Be witty/playful back.`;
   }
 
-  // Construct Full Conversation: [System -> History -> Current]
+  // Construct Full Conversation for Memory
   const conversation = [
     { role: "user", parts: [{ text: `System Instruction: ${systemText}` }] },
     { role: "model", parts: [{ text: "Understood." }] },
-    ...history, // <--- Chat history from Frontend injected here
+    ...history, // <--- Injecting History Here
     { role: "user", parts: [{ text: userMessage }] }
   ];
 
   try {
-    return await callGemini(conversation); // Send Array to Gemini
+    return await callGemini(conversation); 
   } catch (e) { return "I'm here if you need to talk."; }
 }
 
 // --- 6. ENDPOINTS ---
 
 app.post('/chat', async (req, res) => {
-  const { message, history } = req.body; // <--- RECEIVES HISTORY FROM FRONTEND
+  const { message, history } = req.body; // <--- RECEIVES HISTORY
   if (!message) return res.status(400).json({ error: 'Message required.' });
 
   try {
@@ -335,7 +357,7 @@ app.post('/chat', async (req, res) => {
     
     let { intent, location, topic, activity } = await detectIntent(message);
     
-    // Location Memory Update
+    // Context Memory Logic (Location)
     if (location && typeof location === 'string' && location.length > 0) {
         lastContextLocation = location;
     }
@@ -345,11 +367,11 @@ app.post('/chat', async (req, res) => {
 
     let reply;
     if (intent === 'weather') {
-      reply = await handleWeather(location, activity);
+      // Pass history to weather handler now
+      reply = await handleWeather(location, activity, history);
     } else if (intent === 'news') {
       reply = await handleNews(topic, message);
     } else {
-      // Pass history to handleGeneralResponse
       reply = await handleGeneralResponse(message, history);
     }
 
