@@ -9,7 +9,7 @@ dotenv.config();
 console.log('--- Checking Environment Variables on STARTUP ---');
 const apiKeyFromEnv = process.env.GEMINI_API_KEY;
 if (apiKeyFromEnv) {
-  console.log(`GEMINI_API_KEY found. Ends with: ${apiKeyFromEnv.substring(apiKeyFromEnv.length - 4)}`);
+  console.log(`GEMINI_API_KEY found. Ends with: ${apiKeyFromEnv.substring(apiKeyFromEnv.length - 3)}`);
 } else {
   console.error('CRITICAL: GEMINI_API_KEY is missing!');
 }
@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3001;
 // Context Memory for Location (Persists until server restart)
 let lastContextLocation = null; 
 
-// --- MODEL CONFIGURATION ---
+
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'; 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
@@ -50,7 +50,6 @@ app.use(cors({
 app.use(express.json());
 const http = axios.create({ timeout: 15000 });
 
-// --- 2. CORE HELPERS ---
 
 function extractJson(text) {
   if (!text) return null;
@@ -108,9 +107,6 @@ async function callGemini(input, model = GEMINI_MODEL) {
   }
   throw lastError;
 }
-
-// --- 3. INTENT DETECTION ---
-
 function fallbackIntentDetection(userMessage) {
     const lower = userMessage.toLowerCase();
     const weatherKeywords = /(weather|forecast|temp|rain|snow|storm|climate|wind|humidity)/i;
@@ -345,8 +341,6 @@ async function handleGeneralResponse(userMessage, history = []) {
     return await callGemini(conversation); 
   } catch (e) { return "I'm here if you need to talk."; }
 }
-
-// --- 6. ENDPOINTS ---
 
 app.post('/chat', async (req, res) => {
   const { message, history } = req.body; // <--- RECEIVES HISTORY
