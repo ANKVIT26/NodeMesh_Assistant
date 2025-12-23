@@ -68,7 +68,7 @@ async function callGemini(input, model = GEMINI_MODEL) {
   if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
 
   // Fallback List: Tries 2.5 -> 2.0 -> 1.5
-  const modelsToTry = [model, 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const modelsToTry = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
   let lastError;
 
   // Input handling: Array (History) vs String (Prompt)
