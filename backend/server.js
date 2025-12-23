@@ -21,8 +21,8 @@ const PORT = process.env.PORT || 3001;
 // Context Memory for Location (Persists until server restart)
 let lastContextLocation = null; 
 
-
-const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'; 
+// FIX: gemini-2.0-flash is the correct current model ID for the free tier
+const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'; 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY; 
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
@@ -50,7 +50,6 @@ app.use(cors({
 app.use(express.json());
 const http = axios.create({ timeout: 15000 });
 
-
 function extractJson(text) {
   if (!text) return null;
   const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```|({[\s\S]*})/); 
@@ -77,7 +76,6 @@ async function callGemini(input, model = GEMINI_MODEL) {
   let contents = Array.isArray(input) ? input : [{ parts: [{ text: input }] }];
 
   for (const m of modelsToTry) {
-    // We use the v1beta endpoint as it supports the newest 2.0/2.5 models
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`;
     
     try {
@@ -99,25 +97,26 @@ async function callGemini(input, model = GEMINI_MODEL) {
     } catch (error) {
       lastError = error;
       const status = error.response?.status;
+      
+      // FIX: Improved 429 handling with a slightly longer wait for free tier stabilization
       if (status === 429) {
-        console.warn(`⚠️ Rate limit hit for ${m}. Waiting 2.5 seconds before retrying fallback...`);
-        await new Promise(resolve => setTimeout(resolve, 2500)); 
+        console.warn(`⚠️ Rate limit hit for ${m}. Waiting 3 seconds before retrying fallback...`);
+        await new Promise(resolve => setTimeout(resolve, 3000)); 
         continue; 
       }
 
-      // FIX FOR 404 (Model Not Found) or 503 (Overloaded): Try next model immediately
       if (status === 404 || status === 503) {
         console.warn(`🔄 Model ${m} unavailable (${status}). Trying next in nest...`);
         continue;
       }
 
-      // If it's a 400 (Bad Request), stop the loop as retrying won't help
       if (status === 400) break;
     }
   }
   
   throw lastError || new Error('All Gemini models in the nest failed to respond.');
 }
+
 function fallbackIntentDetection(userMessage) {
     const lower = userMessage.toLowerCase();
     const weatherKeywords = /(weather|forecast|temp|rain|snow|storm|climate|wind|humidity)/i;
@@ -147,8 +146,6 @@ User: "${userMessage}"`;
   }
   return fallbackIntentDetection(userMessage);
 }
-
-// --- 4. ANALYZERS ---
 
 async function analyzeSarcasm(userMessage) {
   const prompt = `Analyze for sarcasm. JSON: {"is_sarcastic": boolean, "intended_meaning": "string"}. Message: "${userMessage}"`;
@@ -180,7 +177,7 @@ async function getGitaSupport(userMessage) {
   } catch (error) { return null; }
 }
 
-// --- UPDATED WEATHER HANDLER (With History Context) ---
+// --- UPDATED WEATHER HANDLER (Fix for Tawang and Nashik) ---
 async function handleWeather(location, activity, history = []) {
   if (!WEATHER_API_KEY) return 'Weather service is not configured.';
   
@@ -188,9 +185,15 @@ async function handleWeather(location, activity, history = []) {
   if (typeof location === 'object' && location !== null) {
     queryLocation = location.city || location.name || location.location || JSON.stringify(location);
   }
-  queryLocation = String(queryLocation).trim();
+  queryLocation = String(queryLocation || "").trim();
 
+  // FIX: Programmatic Contextual resolution for Tawang, Nashik, etc.
+  // This appends context ONLY if it's missing, avoiding hardcoding massive lists.
+  if (queryLocation && !queryLocation.toLowerCase().includes('india')) {
+    queryLocation = `${queryLocation}, India`;
+  }
   if (queryLocation.toLowerCase() === 'delhi') queryLocation = 'New Delhi, India';
+
   if (!queryLocation) return 'Please provide a valid location.';
 
   try {
@@ -205,11 +208,7 @@ async function handleWeather(location, activity, history = []) {
     let timeInfo = '';
     if (loc.localtime) {
         const localDate = new Date(loc.localtime);
-        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const dayName = dayNames[localDate.getDay()];
-        const dateStr = localDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-        const timeStr = localDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        timeInfo = `📅 ${dayName}, ${dateStr} 🕐 Local Time: ${timeStr}\n`;
+        timeInfo = `📅 ${localDate.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} 🕐 Local Time: ${localDate.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}\n`;
     }
 
     let response = `**Weather for ${loc.name}, ${loc.region}, ${loc.country}**\n${timeInfo}` +
@@ -219,22 +218,12 @@ async function handleWeather(location, activity, history = []) {
                    `💨 **Wind:** ${c.wind_kph} km/h ${c.wind_dir}\n` +
                    `🌅 **Sunrise:** ${astro?.sunrise || 'N/A'} | 🌇 **Sunset:** ${astro?.sunset || 'N/A'}`;
 
-    // If user asks for activity advice (fishing, outing, etc.)
     if (activity) {
-        // 1. Construct System Prompt with Real Data
-        const systemContext = `
-        You are a weather activity advisor. 
-        Current Weather in ${loc.name}: ${c.condition.text}, ${c.temp_c}C, Wind ${c.wind_kph}kph, Humidity ${c.humidity}%.
-        
-        The user asks about: "${activity}".
-        Based on the data, provide a recommendation starting with "✅ Yes", "❌ No", or "⚠️ Maybe".
-        `;
-
-        // 2. Combine with Chat History (Context of last 6 messages)
+        const systemContext = `Advisor: Current weather in ${loc.name} is ${c.condition.text}, ${c.temp_c}C. User asks about: "${activity}".`;
         const conversation = [
             { role: "user", parts: [{ text: `System Context: ${systemContext}` }] },
-            { role: "model", parts: [{ text: "Understood. I will advise based on this weather." }] },
-            ...history, // Insert chat history here
+            { role: "model", parts: [{ text: "Understood." }] },
+            ...history,
             { role: "user", parts: [{ text: `Is it good for ${activity}?` }] }
         ];
         
@@ -247,8 +236,7 @@ async function handleWeather(location, activity, history = []) {
     return response;
 
   } catch (error) {
-    console.error(`Weather Error for "${queryLocation}":`, error.response?.data || error.message);
-    return `I couldn't find weather information for "${queryLocation}".`;
+    return `I couldn't find precise weather for "${location}". Try adding the state name.`;
   }
 }
 
@@ -270,15 +258,13 @@ async function handleNews(topic, originalMessage) {
     }
 
     const keywords = extractNewsKeywords(topic || originalMessage);
-    
-    // Logic to detect if the user is asking for news specifically about India
     const isIndiaRequested = /india/i.test(originalMessage) || /india/i.test(topic || '');
     const countryCode = isIndiaRequested ? 'in' : 'us';
 
     try {
         const { data } = await http.get('https://newsapi.org/v2/top-headlines', {
             params: { 
-                country: countryCode, // Dynamically set to 'in' or 'us'
+                country: countryCode, 
                 category: keywords ? undefined : 'general', 
                 q: keywords || undefined, 
                 pageSize: 5 
@@ -286,7 +272,7 @@ async function handleNews(topic, originalMessage) {
             headers: { 'X-Api-Key': NEWS_API_KEY }
         });
 
-        if (!data.articles?.length) return `No recent news articles found${isIndiaRequested ? ' for India' : ''}.`;
+        if (!data.articles?.length) return `No recent news articles found for ${isIndiaRequested ? 'India' : 'the US'}.`;
 
         const articles = data.articles.map((a, i) => 
             `**${i + 1}. ${a.title}**\n   📰 *${a.source.name}*` + (a.url ? ` • [Read](${a.url})` : '')
@@ -295,27 +281,17 @@ async function handleNews(topic, originalMessage) {
         const header = isIndiaRequested ? 'Top India Headlines' : 'Latest Headlines';
         return `**📰 ${header}:**\n\n${articles}`;
     } catch (e) { 
-        console.error("News API Error:", e.response?.data || e.message);
         return "Sorry, I couldn't fetch the news right now."; 
     }
 }
 
-// --- UPDATED GENERAL HANDLER (With Memory) ---
 async function handleGeneralResponse(userMessage, history = []) {
   const lower = userMessage.toLowerCase();
-  
-  // 1. Failsafe: Distress/Gita Check
-  const distressKeywords = [
-    'worried', 'worry', 'anxious', 'anxiety', 'sad', 'depressed', 'scared', 
-    'fear', 'stress', 'tired', 'burnout', 'fail', 'failure', 'exam', 'results', 'sleep', 'lost'
-  ];
+  const distressKeywords = ['worried', 'worry', 'anxious', 'sad', 'depressed', 'tired'];
   const hasDistressKeyword = distressKeywords.some(word => lower.includes(word));
-
-  // 2. Creative Mode Check
-  const creativeKeywords = ['write', 'essay', 'story', 'poem', 'blog', 'article', 'code', 'script', 'generate', 'detailed', 'explain', 'cover letter'];
+  const creativeKeywords = ['write', 'essay', 'story', 'poem', 'blog', 'article', 'code', 'script'];
   const isCreativeMode = creativeKeywords.some(word => lower.includes(word));
 
-  // 3. Concurrent Analysis
   let sarcasmResult = null;
   let sentimentResult = { is_low_mood: hasDistressKeyword };
 
@@ -326,15 +302,11 @@ async function handleGeneralResponse(userMessage, history = []) {
     try {
       const results = await Promise.all(tasks);
       sarcasmResult = results[0];
-      if (!hasDistressKeyword && !isCreativeMode && results[1]) {
-          sentimentResult = results[1];
-      }
+      if (!hasDistressKeyword && !isCreativeMode && results[1]) sentimentResult = results[1];
     } catch (e) { console.error("Analysis failed", e); }
   }
 
-  // 4. Priority 1: Gita Support
   if (sentimentResult?.is_low_mood && !isCreativeMode) {
-    console.log(">> Low mood detected. Fetching Gita wisdom...");
     const gitaData = await getGitaSupport(userMessage);
     if (gitaData) {
       return `I sense you might be going through a tough moment. Here is some timeless wisdom from the Bhagavad Gita:\n\n` +
@@ -344,23 +316,13 @@ async function handleGeneralResponse(userMessage, history = []) {
     }
   }
 
-  // 5. Priority 2: General Assistant (With Creative + Memory)
-  let systemText = "";
-  if (isCreativeMode) {
-      systemText = `You are NodeMesh, a creative and detailed AI assistant. Provide comprehensive responses.`;
-  } else {
-      systemText = `You are NodeMesh, a helpful AI assistant. Answer concisely.`;
-  }
+  let systemText = isCreativeMode ? "You are NodeMesh, a creative AI assistant." : "You are NodeMesh, a helpful assistant.";
+  if (sarcasmResult?.is_sarcastic) systemText += ` User is sarcastic. Be witty.`;
 
-  if (sarcasmResult?.is_sarcastic) {
-    systemText += `\nCONTEXT: The user is being sarcastic (Intended: "${sarcasmResult.intended_meaning}"). Be witty/playful back.`;
-  }
-
-  // Construct Full Conversation for Memory
   const conversation = [
     { role: "user", parts: [{ text: `System Instruction: ${systemText}` }] },
     { role: "model", parts: [{ text: "Understood." }] },
-    ...history, // <--- Injecting History Here
+    ...history,
     { role: "user", parts: [{ text: userMessage }] }
   ];
 
@@ -370,36 +332,24 @@ async function handleGeneralResponse(userMessage, history = []) {
 }
 
 app.post('/chat', async (req, res) => {
-  const { message, history } = req.body; // <--- RECEIVES HISTORY
+  const { message, history } = req.body;
   if (!message) return res.status(400).json({ error: 'Message required.' });
 
   try {
     console.log(`\nNew Request: "${message}"`);
-    
     let { intent, location, topic, activity } = await detectIntent(message);
     
-    // Context Memory Logic (Location)
-    if (location && typeof location === 'string' && location.length > 0) {
-        lastContextLocation = location;
-    }
-    if (!location && (intent === 'weather' || activity)) {
-        if (lastContextLocation) location = lastContextLocation;
-    }
+    if (location && typeof location === 'string' && location.length > 0) lastContextLocation = location;
+    if (!location && (intent === 'weather' || activity)) location = lastContextLocation;
 
     let reply;
-    if (intent === 'weather') {
-      // Pass history to weather handler now
-      reply = await handleWeather(location, activity, history);
-    } else if (intent === 'news') {
-      reply = await handleNews(topic, message);
-    } else {
-      reply = await handleGeneralResponse(message, history);
-    }
+    if (intent === 'weather') reply = await handleWeather(location, activity, history);
+    else if (intent === 'news') reply = await handleNews(topic, message);
+    else reply = await handleGeneralResponse(message, history);
 
     res.json({ reply, intent, location, topic });
 
   } catch (error) {
-    console.error('Server Error:', error.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -407,6 +357,4 @@ app.post('/chat', async (req, res) => {
 app.get('/', (_req, res) => res.send('NodeMesh Backend Running'));
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
