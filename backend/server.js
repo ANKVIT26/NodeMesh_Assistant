@@ -99,9 +99,6 @@ async function callGemini(input, model = GEMINI_MODEL) {
     } catch (error) {
       lastError = error;
       const status = error.response?.status;
-
-      // FIX FOR 429 (Rate Limit): We MUST wait. 
-      // Falling back immediately to another model usually fails because they share the same project quota.
       if (status === 429) {
         console.warn(`⚠️ Rate limit hit for ${m}. Waiting 2.5 seconds before retrying fallback...`);
         await new Promise(resolve => setTimeout(resolve, 2500)); 
@@ -268,23 +265,39 @@ async function handleNews(topic, originalMessage) {
         const prompt = `Summarize the latest news request: "${originalMessage}". If specific facts, list them. Under 200 words.`;
         const raw = await callGemini(prompt);
         if (raw && !raw.includes("cannot fulfill")) return raw; 
-    } catch (e) { console.warn("Gemini news summary failed, using API fallback."); }
+    } catch (e) { 
+        console.warn("Gemini news summary failed, using API fallback."); 
+    }
 
     const keywords = extractNewsKeywords(topic || originalMessage);
+    
+    // Logic to detect if the user is asking for news specifically about India
+    const isIndiaRequested = /india/i.test(originalMessage) || /india/i.test(topic || '');
+    const countryCode = isIndiaRequested ? 'in' : 'us';
+
     try {
         const { data } = await http.get('https://newsapi.org/v2/top-headlines', {
-            params: { country: 'us', category: keywords ? undefined : 'general', q: keywords || undefined, pageSize: 5 },
+            params: { 
+                country: countryCode, // Dynamically set to 'in' or 'us'
+                category: keywords ? undefined : 'general', 
+                q: keywords || undefined, 
+                pageSize: 5 
+            },
             headers: { 'X-Api-Key': NEWS_API_KEY }
         });
 
-        if (!data.articles?.length) return "No recent news articles found.";
+        if (!data.articles?.length) return `No recent news articles found${isIndiaRequested ? ' for India' : ''}.`;
 
         const articles = data.articles.map((a, i) => 
             `**${i + 1}. ${a.title}**\n   📰 *${a.source.name}*` + (a.url ? ` • [Read](${a.url})` : '')
         ).join('\n\n');
         
-        return `**📰 Latest Headlines:**\n\n${articles}`;
-    } catch (e) { return "Sorry, I couldn't fetch the news right now."; }
+        const header = isIndiaRequested ? 'Top India Headlines' : 'Latest Headlines';
+        return `**📰 ${header}:**\n\n${articles}`;
+    } catch (e) { 
+        console.error("News API Error:", e.response?.data || e.message);
+        return "Sorry, I couldn't fetch the news right now."; 
+    }
 }
 
 // --- UPDATED GENERAL HANDLER (With Memory) ---
