@@ -66,46 +66,60 @@ function extractJson(text) {
 
 async function callGemini(input, model = GEMINI_MODEL) {
   if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
-
-  // Fallback List: Tries 2.5 -> 2.0 -> 1.5
-  const modelsToTry = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  const modelsToTry = [
+    model, 
+    'gemini-2.0-flash', 
+    'gemini-1.5-flash-latest', 
+    'gemini-1.5-flash-002'
+  ];
+  
   let lastError;
-
-  // Input handling: Array (History) vs String (Prompt)
-  let contents = [];
-  if (Array.isArray(input)) {
-    contents = input; 
-  } else {
-    contents = [{ parts: [{ text: input }] }]; 
-  }
+  let contents = Array.isArray(input) ? input : [{ parts: [{ text: input }] }];
 
   for (const m of modelsToTry) {
+    // We use the v1beta endpoint as it supports the newest 2.0/2.5 models
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`;
+    
     try {
       const response = await http.post(url, {
         contents: contents,
         safetySettings: [
-            { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" },
-            { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
-            { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" },
-            { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE" }
+          { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" },
+          { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
+          { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" },
+          { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE" }
         ]
       });
 
-      const candidates = response.data?.candidates;
-      if (!candidates?.length) throw new Error('No candidates returned');
-      
-      return candidates[0].content.parts[0].text;
+      const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+
+      throw new Error('Empty response from Gemini');
+
     } catch (error) {
       lastError = error;
       const status = error.response?.status;
-      // 404 = Model not found (e.g. if 2.5 isn't released in your region yet)
-      // 503 = Server overloaded
-      if (status !== 429 && status !== 503 && status !== 404) break; 
-      console.warn(`Model ${m} failed (${status}). Retrying fallback...`);
+
+      // FIX FOR 429 (Rate Limit): We MUST wait. 
+      // Falling back immediately to another model usually fails because they share the same project quota.
+      if (status === 429) {
+        console.warn(`⚠️ Rate limit hit for ${m}. Waiting 2.5 seconds before retrying fallback...`);
+        await new Promise(resolve => setTimeout(resolve, 2500)); 
+        continue; 
+      }
+
+      // FIX FOR 404 (Model Not Found) or 503 (Overloaded): Try next model immediately
+      if (status === 404 || status === 503) {
+        console.warn(`🔄 Model ${m} unavailable (${status}). Trying next in nest...`);
+        continue;
+      }
+
+      // If it's a 400 (Bad Request), stop the loop as retrying won't help
+      if (status === 400) break;
     }
   }
-  throw lastError;
+  
+  throw lastError || new Error('All Gemini models in the nest failed to respond.');
 }
 function fallbackIntentDetection(userMessage) {
     const lower = userMessage.toLowerCase();
