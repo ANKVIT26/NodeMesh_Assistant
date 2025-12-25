@@ -287,11 +287,11 @@ function extractNewsKeywords(text) {
 async function handleNews(topic, originalMessage) {
     if (!NEWS_API_KEY) return 'News service is not configured yet.';
 
-    // 1. Check if user wants "MORE" news (Pagination Logic)
-    let page = 1;
-    if (originalMessage.toLowerCase().includes('more')) {
-        page = 2; // If user says "more", we fetch the next page of results
-    }
+    // 1. Detect "More" Intent
+    // If user says "more", we fetch Page 2. Otherwise, Page 1.
+    const isMore = originalMessage.toLowerCase().includes('more');
+    const page = isMore ? 2 : 1;
+    const PAGE_SIZE = 10; // CONSTANT: Must match for both pages to avoid overlap
 
     // 2. Extract Keywords
     const blacklist = new Set(['news','headline','headlines','top','latest','get','me','what','about','on','regarding','update', 'for', 'in', 'show', 'more']);
@@ -300,17 +300,17 @@ async function handleNews(topic, originalMessage) {
 
     let endpoint = 'https://newsapi.org/v2/everything';
     let params = { 
-        pageSize: 5, 
-        page: page, // <--- Uses the page detected above
+        pageSize: PAGE_SIZE, 
+        page: page, 
         language: 'en', 
-        sortBy: 'publishedAt' // Shows newest first
+        sortBy: 'publishedAt' 
     }; 
     
     if (derivedKeywords) {
         params.q = derivedKeywords;
     } else {
         endpoint = 'https://newsapi.org/v2/top-headlines';
-        params = { country: 'us', category: 'general', pageSize: 5, page: page }; 
+        params = { country: 'us', category: 'general', pageSize: PAGE_SIZE, page: page }; 
     }
 
     try {
@@ -318,7 +318,10 @@ async function handleNews(topic, originalMessage) {
         
         if (!data.articles?.length) return page > 1 ? "I couldn't find any *more* news on that topic." : "I couldn't find any recent news articles.";
         
-        const articles = data.articles.map((a, i) => `**${i+1}. ${a.title}**\n   📰 _${a.source?.name}_ • ${new Date(a.publishedAt).toLocaleDateString()}\n   🔗 [Read more](${a.url})`).join('\n\n');
+        // Calculate the starting number for the list (e.g., 11 for page 2)
+        const startNum = (page - 1) * PAGE_SIZE + 1;
+
+        const articles = data.articles.map((a, i) => `**${startNum + i}. ${a.title}**\n   📰 _${a.source?.name}_ • ${new Date(a.publishedAt).toLocaleDateString()}\n   🔗 [Read more](${a.url})`).join('\n\n');
         
         const titlePrefix = page > 1 ? "More Headlines" : "Headlines";
         return `**📰 ${titlePrefix}: ${derivedKeywords || "Top Stories"}**\n\n${articles}`;
@@ -326,7 +329,6 @@ async function handleNews(topic, originalMessage) {
         return 'Sorry, I had trouble fetching the news.';
     }
 }
-
 // --- ANALYSIS HELPERS ---
 
 async function analyzeSarcasm(userMessage) {
