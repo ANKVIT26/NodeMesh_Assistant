@@ -93,14 +93,15 @@ function extractJson(text) {
   }
 }
 
-async function callGemini(prompt, model = GEMINI_MODEL, history = []) {
+// Updated callGemini with optional maxTokens parameter
+async function callGemini(prompt, model = GEMINI_MODEL, history = [], maxTokens = undefined) {
   if (!GEMINI_API_KEY) {
-    throw new Error('Missing GEMINI_API_KEY environment variable'); //
+    throw new Error('Missing GEMINI_API_KEY environment variable');
   }
 
   const modelsToTry = [];
   if (model) modelsToTry.push(model);
-  if (!modelsToTry.includes('gemini-2.0-flash')) modelsToTry.push('gemini-2.0-flash'); //
+  if (!modelsToTry.includes('gemini-2.0-flash')) modelsToTry.push('gemini-2.0-flash');
 
   let lastError;
   for (const m of modelsToTry) {
@@ -108,22 +109,24 @@ async function callGemini(prompt, model = GEMINI_MODEL, history = []) {
     console.log(`Attempting Gemini call to model: ${m}`);
     
     try {
-      // Construct payload with history
       const contents = [...history];
-      // If the prompt is not just context, add it as the final user message
-      // (This logic assumes 'prompt' is the new message to process)
       if (prompt) {
           contents.push({ role: 'user', parts: [{ text: prompt }] });
       }
 
+      // --- DYNAMIC CONFIGURATION ---
+      // This ensures we ONLY set a limit if 'maxTokens' is passed.
+      // If maxTokens is undefined (like in Weather/News), no limit is sent.
+      const generationConfig = {}; 
+      if (maxTokens) {
+          generationConfig.maxOutputTokens = maxTokens;
+      }
+
       const response = await http.post(url, {
         contents: contents,
-        generationConfig: {
-            maxOutputTokens: 100, 
-            temperature: 0.7       // Optional: Standard creativity
-        },
+        generationConfig: generationConfig, // Pass the dynamic config object
         safetySettings: [
-            { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" }, //
+            { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" },
             { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
             { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE" },
             { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE" }
@@ -132,11 +135,11 @@ async function callGemini(prompt, model = GEMINI_MODEL, history = []) {
 
       const candidates = response.data?.candidates;
       if (!candidates || !Array.isArray(candidates) || candidates.length === 0) {
-        lastError = new Error('No candidates in Gemini response'); //
+        lastError = new Error('No candidates in Gemini response');
         continue;
       }
       
-      const parts = candidates[0]?.content?.parts; //
+      const parts = candidates[0]?.content?.parts;
       const textParts = parts
         ?.filter(part => part && typeof part.text === 'string')
         .map(part => part.text);
@@ -145,19 +148,18 @@ async function callGemini(prompt, model = GEMINI_MODEL, history = []) {
       if (candidate) {
         return candidate;
       }
-      lastError = new Error('Empty text content from Gemini response'); //
+      lastError = new Error('Empty text content from Gemini response');
 
     } catch (error) {
       lastError = error;
       const status = error.response?.status;
       const retriable = status === 429 || status === 500 || status === 503 || error.code === 'ECONNABORTED'; 
-      console.warn(`Gemini call failed for model ${m}. ${retriable ? 'Trying next fallback...' : ''}`); //
+      console.warn(`Gemini call failed for model ${m}. ${retriable ? 'Trying next fallback...' : ''}`);
       if (!retriable) break; 
     }
   }
   throw lastError || new Error('Gemini call failed after trying all fallbacks');
 }
-
 // --- INTENT DETECTION ---
 
 function fallbackIntentDetection(userMessage) {
@@ -382,7 +384,7 @@ async function handleGeneralResponse(userMessage, sessionId) {
 
   try {
     if (DISABLE_GEMINI) throw new Error('Gemini disabled'); //
-    const response = await callGemini(contextPrompt, GEMINI_MODEL, history);
+    const response = await callGemini(contextPrompt, GEMINI_MODEL, history, 100);
     return response.trim();
   } catch (error) {
     return "I'm having trouble thinking right now. Try asking for weather or news."; //
