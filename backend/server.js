@@ -285,46 +285,45 @@ function extractNewsKeywords(text) {
 }
 
 async function handleNews(topic, originalMessage) {
-    if (!NEWS_API_KEY) return 'News service is not configured yet. Please add NEWS_API_KEY.';
+    if (!NEWS_API_KEY) return 'News service is not configured yet.';
 
-    // --- DISABLED GEMINI SUMMARY ---
-    // We comment this out so we ALWAYS get the full list from the API instead of a short summary.
-    /*
-    try {
-        const geminiPrompt = `You are a factual news assistant. Provide a concise answer (under 250 words) based on current verifiable info. Request: "${originalMessage}"`;
-        const raw = await callGemini(geminiPrompt, GEMINI_MODEL); 
-        const cleaned = raw.trim().replace(/^```[\s\S]*?\n([\s\S]*?)\n```$/, '$1').trim();
-        if (cleaned && !cleaned.toLowerCase().includes("cannot fulfill")) return cleaned;
-    } catch (e) { console.warn('Gemini news summary failed, falling back to API.'); }
-    */
-    // -------------------------------
+    // 1. Check if user wants "MORE" news (Pagination Logic)
+    let page = 1;
+    if (originalMessage.toLowerCase().includes('more')) {
+        page = 2; // If user says "more", we fetch the next page of results
+    }
 
-    // 1. Prepare Keywords
-    // Added 'for' to blacklist so "News for India" becomes just "India"
-    const blacklist = new Set(['news','headline','headlines','top','latest','get','me','what','about','on','regarding','update', 'for', 'in']);
+    // 2. Extract Keywords
+    const blacklist = new Set(['news','headline','headlines','top','latest','get','me','what','about','on','regarding','update', 'for', 'in', 'show', 'more']);
     const lower = (topic || originalMessage || '').toLowerCase();
     const derivedKeywords = lower.replace(/[^a-z0-9\s-]/g, ' ').split(/\s+/).filter(w => w && !blacklist.has(w) && w.length > 2).slice(0, 5).join(' ');
 
     let endpoint = 'https://newsapi.org/v2/everything';
-    // --- CHANGE: Increased pageSize to 10 ---
-    let params = { pageSize: 10, language: 'en', sortBy: 'publishedAt' }; // Changed to publishedAt for fresher news
+    let params = { 
+        pageSize: 5, 
+        page: page, // <--- Uses the page detected above
+        language: 'en', 
+        sortBy: 'publishedAt' // Shows newest first
+    }; 
     
     if (derivedKeywords) {
         params.q = derivedKeywords;
     } else {
         endpoint = 'https://newsapi.org/v2/top-headlines';
-        params = { country: 'us', category: 'general', pageSize: 10 }; 
+        params = { country: 'us', category: 'general', pageSize: 5, page: page }; 
     }
 
     try {
         const { data } = await http.get(endpoint, { params, headers: { 'X-Api-Key': NEWS_API_KEY } });
         
-        if (!data.articles?.length) return "I couldn't find any recent news articles.";
+        if (!data.articles?.length) return page > 1 ? "I couldn't find any *more* news on that topic." : "I couldn't find any recent news articles.";
         
         const articles = data.articles.map((a, i) => `**${i+1}. ${a.title}**\n   📰 _${a.source?.name}_ • ${new Date(a.publishedAt).toLocaleDateString()}\n   🔗 [Read more](${a.url})`).join('\n\n');
-        return `**📰 Headlines: ${derivedKeywords || "Top Stories"}**\n\n${articles}`;
+        
+        const titlePrefix = page > 1 ? "More Headlines" : "Headlines";
+        return `**📰 ${titlePrefix}: ${derivedKeywords || "Top Stories"}**\n\n${articles}`;
     } catch (error) {
-        return 'Sorry, I had trouble fetching the latest news.';
+        return 'Sorry, I had trouble fetching the news.';
     }
 }
 
