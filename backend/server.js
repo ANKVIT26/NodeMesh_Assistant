@@ -285,13 +285,16 @@ function extractNewsKeywords(text) {
 }
 
 async function handleNews(topic, originalMessage) {
-    if (!NEWS_API_KEY) return 'News service is not configured yet.';
+    if (!NEWS_API_KEY) return 'News service is not configured yet. Please add NEWS_API_KEY.';
 
     // 1. Detect "More" Intent
     // If user says "more", we fetch Page 2. Otherwise, Page 1.
     const isMore = originalMessage.toLowerCase().includes('more');
     const page = isMore ? 2 : 1;
-    const PAGE_SIZE = 10; // CONSTANT: Must match for both pages to avoid overlap
+    
+    // CONSTANT: Must match for both pages to avoid overlap. 
+    // If we fetched 10 items for page 1, we must fetch chunks of 10 for page 2 to get new items.
+    const PAGE_SIZE = 10; 
 
     // 2. Extract Keywords
     const blacklist = new Set(['news','headline','headlines','top','latest','get','me','what','about','on','regarding','update', 'for', 'in', 'show', 'more']);
@@ -303,7 +306,7 @@ async function handleNews(topic, originalMessage) {
         pageSize: PAGE_SIZE, 
         page: page, 
         language: 'en', 
-        sortBy: 'publishedAt' 
+        sortBy: 'publishedAt' // Shows newest first
     }; 
     
     if (derivedKeywords) {
