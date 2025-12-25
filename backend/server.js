@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
-import crypto from 'crypto'; // Added for generating session IDs if not provided
 
 dotenv.config();
 
@@ -32,7 +31,7 @@ const DISABLE_GEMINI = (process.env.DISABLE_GEMINI || 'false').toLowerCase() ===
 // --- MEMORY STORAGE ---
 // In-memory store for context. In production, use Redis or a Database.
 const sessionStore = new Map();
-const MAX_HISTORY_TURNS = 6; // Limit to last 6 interactions (12 messages)
+const MAX_HISTORY_TURNS = 6; 
 
 const allowedOrigins = [
   'https://nodemesh-ai-frontend.onrender.com', 
@@ -42,7 +41,7 @@ app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.'; //
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.'; 
       return callback(new Error(msg), false);
     }
     return callback(null, true);
@@ -50,7 +49,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   credentials: true
 }));
-app.options('*', cors()); // Handle preflight requests
+app.options('*', cors()); 
 
 app.use(express.json());
 
@@ -119,6 +118,10 @@ async function callGemini(prompt, model = GEMINI_MODEL, history = []) {
 
       const response = await http.post(url, {
         contents: contents,
+        generationConfig: {
+            maxOutputTokens: 100, 
+            temperature: 0.7       // Optional: Standard creativity
+        },
         safetySettings: [
             { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE" }, //
             { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE" },
@@ -259,8 +262,6 @@ async function handleWeather(location) {
             console.warn('Failed to generate activities:', actError.message);
         }
     }
-    // ----------------------------------------
-
     return response;
 
   } catch (error) {
@@ -350,7 +351,6 @@ async function getGitaSupport(userMessage) {
   } catch { return null; }
 }
 
-// --- GENERAL RESPONSE WITH CONTEXT ---
 
 async function handleGeneralResponse(userMessage, sessionId) {
   let sarcasmResult = null;
@@ -371,7 +371,6 @@ async function handleGeneralResponse(userMessage, sessionId) {
     if (gita) return `I sense you're feeling down. Here is wisdom from the Gita:\n\n**${gita.sanskrit}**\n*${gita.english_transliteration}*\n\n${gita.meaning}`; //
   }
 
-  // SYSTEM INSTRUCTION CONSTRUCTION
   let systemInstruction = `You are NodeMesh, a helpful AI assistant. Answer concisely.`; //
   if (sarcasmResult?.is_sarcastic) {
     systemInstruction += `\n[TONE: SARCASTIC] The user meant: "${sarcasmResult.intended_meaning}". Respond to that.`; //
@@ -379,12 +378,6 @@ async function handleGeneralResponse(userMessage, sessionId) {
 
   // RETRIEVE AND USE HISTORY
   const history = getSessionHistory(sessionId);
-  
-  // Create a combined prompt that allows Gemini to see the System Instruction + History
-  // Note: We don't send systemInstruction as a 'system' role in v1beta easily, so we prepend it to the prompt or first message
-  // For simplicity with callGemini wrapper, we treat the prompt as the next user message, but we pass the history.
-  
-  // Ideally, we prepend system instruction to the very first history item or send it as part of the current prompt context
   const contextPrompt = `${systemInstruction}\nUser message: "${userMessage}"`;
 
   try {
@@ -411,7 +404,7 @@ app.post('/chat', async (req, res) => {
   try {
     // 1. Detect Intent
     const { intent, location, topic } = await detectIntent(message);
-    let reply = "Sorry, I couldn't process that request."; 
+    let reply = "Sorry, Gemini RATE LIMIT HIT."; 
 
     // 2. Route Request
     if (intent === 'weather') {
