@@ -4,7 +4,6 @@ import axios from "axios";
 import ChatBubble from "./ChatBubble"; 
 import TypingIndicator from "./TypingIndicator";
 
-// Use the VITE environment variable to get the backend URL
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
 function App() {
@@ -18,54 +17,91 @@ function App() {
   const [chatHistory, setChatHistory] = useState([]);
   const [question, setQuestion] = useState("");
   const [generatingAnswer, setGeneratingAnswer] = useState(false);
+  const [showScrollArrow, setShowScrollArrow] = useState(false);
+  
   const chatContainerRef = useRef(null);
+  const abortControllerRef = useRef(null); 
 
+  // Auto-scroll logic
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatHistory, generatingAnswer]);
 
+  // Scroll listener to show/hide jump arrow
+  const handleScroll = () => {
+    if (chatContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+      // Show arrow if user is more than 300px away from bottom
+      const isNearBottom = scrollHeight - scrollTop <= clientHeight + 300;
+      setShowScrollArrow(!isNearBottom);
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+  };
+
+  // Function to stop generation
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setGeneratingAnswer(false);
+    }
+  };
+
   async function generateAnswer(e) {
     e.preventDefault();
     if (!question.trim()) return;
 
+    // Initialize AbortController
+    abortControllerRef.current = new AbortController();
+    
     setGeneratingAnswer(true);
     const currentQuestion = question;
     setQuestion(""); 
 
-    // --- 1. CAPTURE HISTORY (The Missing Link) ---
-    // We take the last 10 messages so the AI has enough context
-    // to answer "refer to my 3rd message".
     const historyContext = chatHistory.slice(-6).map(msg => ({
       role: msg.type === 'question' ? 'user' : 'model',
       parts: [{ text: msg.content }]
     }));
 
-    // Add user question to UI
     setChatHistory(prev => [...prev, { type: 'question', content: currentQuestion }]);
 
     try {
-      // --- 2. SEND HISTORY TO BACKEND ---
       const response = await axios.post(`${API_BASE_URL}/chat`, { 
         message: currentQuestion,
-        history: historyContext // <--- This line is CRITICAL for memory
+        history: historyContext
+      }, {
+        signal: abortControllerRef.current.signal // Attach signal to request
       });
       
       const aiResponse = response.data.reply;
       setChatHistory(prev => [...prev, { type: 'answer', content: aiResponse }]);
       
     } catch (error) {
-      console.error("Error:", error.response?.data || error.message);
-      const errorMessage = "Sorry - Something went wrong connecting to the server.";
-      setChatHistory(prev => [...prev, { type: 'answer', content: errorMessage }]);
+      if (axios.isCancel(error)) {
+        setChatHistory(prev => [...prev, { type: 'answer', content: "_Generation stopped by user._" }]);
+      } else {
+        console.error("Error:", error.response?.data || error.message);
+        const errorMessage = "Sorry - Something went wrong connecting to the server.";
+        setChatHistory(prev => [...prev, { type: 'answer', content: errorMessage }]);
+      }
+    } finally {
+      setGeneratingAnswer(false);
+      abortControllerRef.current = null;
     }
-    setGeneratingAnswer(false);
   }
 
   return (
     <div className={`fixed inset-0 transition-colors duration-500 ${darkMode ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-r from-blue-50 to-blue-100'}`}>
-      <div className="h-full max-w-4xl mx-auto flex flex-col p-3">
+      <div className="h-full max-w-4xl mx-auto flex flex-col p-3 relative">
         
         {/* Header */}
         <header className="flex items-center justify-between py-4">
@@ -76,7 +112,6 @@ function App() {
             className={`ml-4 px-4 py-2 rounded-lg font-semibold shadow-md transition-all duration-200 focus:outline-none darkmode-toggle ${darkMode ? 'bg-gray-700 text-cyan-200 hover:bg-gray-600' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
             onClick={() => setDarkMode((d) => !d)}
             type="button"
-            aria-label="Toggle dark mode"
           >
             {darkMode ? '🌙 Dark' : '☀️ Light'}
           </button>
@@ -85,7 +120,8 @@ function App() {
         {/* Scrollable Chat Container */}
         <div 
           ref={chatContainerRef}
-          className={`flex-1 overflow-y-auto mb-4 rounded-lg shadow-lg p-4 hide-scrollbar transition-colors duration-500 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}
+          onScroll={handleScroll}
+          className={`flex-1 overflow-y-auto mb-4 rounded-lg shadow-lg p-4 hide-scrollbar transition-colors duration-500 relative ${darkMode ? 'bg-gray-800' : 'bg-white'}`}
         >
           {chatHistory.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6">
@@ -95,10 +131,10 @@ function App() {
                   I'm here to help you with anything you'd like to know.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">💡</span> Intent Based </div>
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">🔧</span> Bhagwad Gita Shloks </div>
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">📝</span> General knowledge </div>
-                  <div className={`p-4 rounded-lg shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-lg cursor-pointer ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> <span className="text-blue-500">🤔</span> Sarcasm Friendly </div>
+                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">💡</span> Intent Based </div>
+                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">🔧</span> Bhagwad Gita Shloks </div>
+                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">📝</span> General knowledge </div>
+                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">🤔</span> Sarcasm Friendly </div>
                 </div>
               </div>
             </div>
@@ -118,14 +154,25 @@ function App() {
               )}
             </div>
           )}
+
+          {/* Jump to Bottom Arrow */}
+          {showScrollArrow && (
+            <button 
+              onClick={scrollToBottom}
+              className={`fixed bottom-28 right-8 md:right-1/4 p-3 rounded-full shadow-2xl transition-all duration-300 z-50 jump-arrow ${darkMode ? 'bg-cyan-600 text-white' : 'bg-blue-500 text-white'}`}
+            >
+              ↓
+            </button>
+          )}
         </div>
 
         {/* Fixed Input Form */}
         <form onSubmit={generateAnswer} className={`rounded-lg shadow-lg p-4 transition-colors duration-500 ${darkMode ? 'bg-gray-900' : 'bg-white'}`}>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <textarea
               required
-              className={`flex-1 border rounded p-3 focus:ring-2 resize-none transition-colors duration-200 ${darkMode ? 'bg-gray-800 border-gray-700 text-cyan-100 focus:border-cyan-400 focus:ring-cyan-400 placeholder-gray-400' : 'border-gray-300 focus:border-blue-400 focus:ring-blue-400'}`}
+              disabled={generatingAnswer}
+              className={`flex-1 border rounded p-3 focus:ring-2 resize-none transition-colors duration-200 ${darkMode ? 'bg-gray-800 border-gray-700 text-cyan-100 focus:border-cyan-400 focus:ring-cyan-400 placeholder-gray-400' : 'border-gray-300 focus:border-blue-400 focus:ring-blue-400'} ${generatingAnswer ? 'opacity-50' : ''}`}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="Ask anything..."
@@ -133,17 +180,28 @@ function App() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  generateAnswer(e);
+                  if (!generatingAnswer) generateAnswer(e);
                 }
               }}
             ></textarea>
-            <button
-              type="submit"
-              className={`px-6 py-2 font-semibold rounded-md shadow-md transition-all duration-200 transform hover:scale-105 focus:outline-none send-btn ${darkMode ? 'bg-cyan-700 text-white hover:bg-cyan-800' : 'bg-blue-500 text-white hover:bg-blue-600'} ${generatingAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
-              disabled={generatingAnswer}
-            >
-              Send
-            </button>
+            
+            {generatingAnswer ? (
+              <button
+                type="button"
+                onClick={stopGeneration}
+                className="px-4 py-2 bg-red-500 text-white font-bold rounded-md hover:bg-red-600 transition-colors flex items-center justify-center"
+                title="Stop Generating"
+              >
+                <div className="w-3 h-3 bg-white rounded-sm"></div> {/* Stop Square icon */}
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className={`px-6 py-2 font-semibold rounded-md shadow-md transition-all duration-200 transform hover:scale-105 focus:outline-none send-btn ${darkMode ? 'bg-cyan-700 text-white hover:bg-cyan-800' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
+              >
+                Send
+              </button>
+            )}
           </div>
         </form>
       </div>
