@@ -87,7 +87,7 @@ Use Postman to test backend endpoints by importing the API sample code/ pasting 
 ### ⚡ Tech Stack Recap
 - **Frontend:** React, Vite, Tailwind CSS  
 - **Backend:** Node.js, Express  
-- **APIs:** Gemini Flash 2.0, WeatherAPI, NewsAPI  
+- **APIs:** Groq llama-3.3-70b-versatile, WeatherAPI, NewsAPI  
 - **Dev Tools:** Postman, ESLint, dotenv  
 
 <img width="1919" height="877" alt="image" src="https://github.com/user-attachments/assets/474837de-cef8-4baa-a5f5-e3270a6d88fa" />
