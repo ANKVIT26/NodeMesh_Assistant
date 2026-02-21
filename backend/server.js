@@ -11,21 +11,17 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// --- INITIALIZATION & SECURITY ---
+// --- INITIALIZATION ---
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
+const NEWS_API_KEY = process.env.NEWS_API_KEY;
 
-// Trust Render Proxy for Rate Limiting
+// --- SECURITY & PROXY ---
 app.set('trust proxy', 1); 
-
-app.use(helmet()); //
+app.use(helmet());
 app.use(express.json());
 
-const allowedOrigins = [
-  'https://nodemesh-ai-frontend.onrender.com', 
-  'http://localhost:5173'
-];
-
+const allowedOrigins = ['https://nodemesh-ai-frontend.onrender.com', 'http://localhost:5173'];
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
@@ -35,14 +31,13 @@ app.use(cors({
 }));
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, //
-  message: { reply: "Too many requests. Please try again later." }
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { reply: "⚠️ **WARNING: Rate limit exceeded. Please wait 15 minutes.**" }
 });
 app.use('/chat', limiter);
 
 // --- MEMORY STORAGE ---
-// Volatile in-memory store for context
 const sessionStore = new Map();
 const MAX_HISTORY_TURNS = 6; 
 
@@ -61,61 +56,82 @@ function updateSessionHistory(sessionId, role, content) {
 
 // --- SUBSTANTIVE WEATHER HANDLER ---
 async function handleWeather(location) {
-  if (!WEATHER_API_KEY) return 'Weather service not configured.';
+  if (!WEATHER_API_KEY) return '⚠️ **WARNING: Weather API Key is missing!**';
   try {
     const url = `https://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(location)}&days=1`;
     const { data } = await axios.get(url);
-    
     const loc = data.location;
     const current = data.current;
     const astro = data.forecast.forecastday[0].astro;
 
-    // Formatting Local Time
     const localDate = new Date(loc.localtime.replace(' ', 'T'));
     const timeStr = localDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    const dateStr = localDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-
+    
     let response = `**Weather for ${loc.name}, ${loc.region}**\n`;
-    response += `📅 ${dateStr}\n🕐 Local Time: ${timeStr}\n\n`;
+    response += `📅 ${localDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n🕐 Local Time: ${timeStr}\n\n`;
     response += `**Condition:** ${current.condition.text}\n`;
     response += `🌡️ **Temp:** ${current.temp_c}°C (Feels like: ${current.feelslike_c}°C)\n`;
     response += `💧 **Humidity:** ${current.humidity}% | 💨 **Wind:** ${current.wind_kph} km/h ${current.wind_dir}\n`;
     response += `🌅 **Sunrise:** ${astro.sunrise} | 🌇 **Sunset:** ${astro.sunset}`;
 
-    // Add-on: Outdoor Activities based on data
-    const activityPrompt = `Weather: ${current.condition.text}, ${current.temp_c}°C. Suggest 3 brief outdoor activities.`;
+    const activityPrompt = `Weather: ${current.condition.text}, ${current.temp_c}°C. Suggest 3 brief activities.`;
     const activities = await groq.chat.completions.create({
       messages: [{ role: "user", content: activityPrompt }],
       model: "llama-3.1-8b-instant",
     });
-    response += `\n\n**🏃 Suggested Activities:**\n${activities.choices[0].message.content}`;
+    response += `\n\n**🏃 Smart Activity Recommendations:**\n${activities.choices[0].message.content}`;
 
     return response;
-  } catch (error) {
-    return `I couldn't find weather for "${location}". Please try a more specific city.`;
-  }
+  } catch (error) { return `⚠️ **WARNING: Could not find weather for "${location}". Check spelling.**`; }
 }
 
-// --- ANALYSIS FUNCTIONS (Sarcasm & Gita) ---
+// --- CATEGORIZED NEWS (INDIA & US) ---
+async function handleNews(originalMessage) {
+  if (!NEWS_API_KEY) return '⚠️ **WARNING: News API Key is missing!**';
+  
+  const lowerMsg = originalMessage.toLowerCase();
+  
+  // Regional Detection
+  const countryCode = /india|indian|delhi|mumbai|bangalore/i.test(lowerMsg) ? 'in' : 'us';
+  
+  // Categorization
+  let category = 'general';
+  if (/business|finance|stock|market/i.test(lowerMsg)) category = 'business';
+  else if (/health|medical|doctor|virus/i.test(lowerMsg)) category = 'health';
+  else if (/tech|software|gadget|ai|coding/i.test(lowerMsg)) category = 'technology';
+  else if (/education|school|university|exam/i.test(lowerMsg)) category = 'science'; 
+
+  try {
+    const { data } = await axios.get(`https://newsapi.org/v2/top-headlines`, {
+      params: { country: countryCode, category, pageSize: 5 },
+      headers: { 'X-Api-Key': NEWS_API_KEY }
+    });
+
+    if (!data.articles?.length) return `**No recent ${category} news found for ${countryCode.toUpperCase()} right now.**`;
+
+    const articles = data.articles.map((a, i) => `**${i + 1}. ${a.title}**\n   📰 _${a.source.name}_ • [Read Full](${a.url})`).join('\n\n');
+    return `**📰 Top ${category.toUpperCase()} Headlines (${countryCode.toUpperCase()}):**\n\n${articles}`;
+  } catch (error) { return "⚠️ **WARNING: News service is currently unreachable.**"; }
+}
+
+// --- ANALYSIS FUNCTIONS ---
 async function analyzeSarcasm(userMessage) {
-  const prompt = `Analyze for sarcasm: "${userMessage}". JSON: {"is_sarcastic": bool, "literal_meaning": "", "intended_meaning": ""}`;
   try {
     const completion = await groq.chat.completions.create({
-      messages: [{ role: "system", content: "Expert linguist. Output ONLY JSON." }, { role: "user", content: prompt }],
+      messages: [{ role: "system", content: "Expert linguist. Output ONLY JSON: {\"is_sarcastic\": bool, \"intended_meaning\": \"string\"}" }, { role: "user", content: userMessage }],
       model: "llama-3.1-8b-instant",
-      response_format: { type: "json_object" } //
+      response_format: { type: "json_object" }
     });
     return JSON.parse(completion.choices[0].message.content);
   } catch { return { is_sarcastic: false }; }
 }
 
 async function getGitaSupport(userMessage) {
-  const prompt = `User feels: "${userMessage}". Select best Gita verse. JSON: {"sanskrit": "", "translit": "", "meaning": ""}`;
   try {
     const completion = await groq.chat.completions.create({
       messages: [
-        { role: "system", content: "Wise spiritual guide. Knowledge Bank: Anxiety(2.47), Restless(6.26), Despair(2.14). Output ONLY JSON." },
-        { role: "user", content: prompt }
+        { role: "system", content: "Wise spiritual guide. Knowledge Bank: Anxiety(2.47), Restless(6.26), Despair(2.14). Output ONLY JSON: {\"sanskrit\": \"\", \"translit\": \"\", \"meaning\": \"\"}" },
+        { role: "user", content: userMessage }
       ],
       model: "llama-3.3-70b-versatile",
       response_format: { type: "json_object" }
@@ -124,14 +140,14 @@ async function getGitaSupport(userMessage) {
   } catch { return null; }
 }
 
-// --- MAIN CHAT LOGIC ---
+// --- MAIN CHAT ENDPOINT ---
 app.post('/chat', async (req, res) => {
   const { message, sessionId = 'default' } = req.body;
   if (!message) return res.status(400).json({ error: "Message required" });
 
   try {
-    // 1. Intent Detection
-    const intentPrompt = `Intent: "${message}"? (weather/general). JSON: {"intent": "", "location": ""}`;
+    // Intent Detection
+    const intentPrompt = `Classify intent: "${message}". JSON: {"intent": "weather|news|general", "location": "string"}`;
     const intentRaw = await groq.chat.completions.create({
       messages: [{ role: "user", content: intentPrompt }],
       model: "llama-3.1-8b-instant",
@@ -142,9 +158,10 @@ app.post('/chat', async (req, res) => {
     let reply;
     if (intent === 'weather') {
       reply = await handleWeather(location || message);
+    } else if (intent === 'news') {
+      reply = await handleNews(message);
     } else {
-      // 2. Sarcasm & Sentiment Analysis
-      const [sarcasm, sentiment] = await Promise.all([
+      const [sarcasm, sentimentRaw] = await Promise.all([
         analyzeSarcasm(message),
         groq.chat.completions.create({
           messages: [{ role: "user", content: `Is this low mood? "${message}". JSON: {"low": bool}` }],
@@ -153,24 +170,20 @@ app.post('/chat', async (req, res) => {
         })
       ]);
 
-      const isLowMood = JSON.parse(sentiment.choices[0].message.content).low;
-
-      if (isLowMood) {
+      if (JSON.parse(sentimentRaw.choices[0].message.content).low) {
         const gita = await getGitaSupport(message);
-        reply = `I sense you're going through a lot. A short but surreal shlok from the Bhagvad Gita:\n\n**${gita.sanskrit}**\n*${gita.translit}*\n\n${gita.meaning}`;
+        reply = `**Bhagavad Gita Spiritual Support:**\n\n**${gita.sanskrit}**\n*${gita.translit}*\n\n${gita.meaning}`;
       } else {
-        // 3. General Chat with Memory
         const history = getSessionHistory(sessionId);
         const isEssay = /essay|elaborate|detailed/i.test(message);
-        
         const completion = await groq.chat.completions.create({
           messages: [
-            { role: "system", content: isEssay ? "Provide a detailed essay." : "You are NodeMesh. Answer crisp and concise (max 200 words)." },
+            { role: "system", content: isEssay ? "Detailed Essay mode." : "You are NodeMesh. Answer crisp/concise (max 200 words)." },
             ...history.map(h => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content })),
-            { role: "user", content: message }
+            { role: "user", content: sarcasm.is_sarcastic ? `(User meant: ${sarcasm.intended_meaning}) ${message}` : message }
           ],
           model: "llama-3.3-70b-versatile",
-          max_tokens: isEssay ? 300 : 180
+          max_tokens: isEssay ? 2000 : 400
         });
         reply = completion.choices[0].message.content;
       }
@@ -181,8 +194,8 @@ app.post('/chat', async (req, res) => {
     res.json({ reply, intent });
 
   } catch (error) {
-    console.error("Chat Error:", error);
-    res.status(500).json({ error: "Couldn't reach the api server. Try again after atleast an hour." });
+    console.error("Critical Error:", error);
+    res.status(500).json({ error: "⚠️ **WARNING: Critical processing failure on server.**" });
   }
 });
 
