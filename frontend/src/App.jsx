@@ -22,18 +22,15 @@ function App() {
   const chatContainerRef = useRef(null);
   const abortControllerRef = useRef(null); 
 
-  // Auto-scroll logic
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [chatHistory, generatingAnswer]);
 
-  // Scroll listener to show/hide jump arrow
   const handleScroll = () => {
     if (chatContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
-      // Show arrow if user is more than 300px away from bottom
       const isNearBottom = scrollHeight - scrollTop <= clientHeight + 300;
       setShowScrollArrow(!isNearBottom);
     }
@@ -48,7 +45,6 @@ function App() {
     }
   };
 
-  // Function to stop generation
   const stopGeneration = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -60,9 +56,7 @@ function App() {
     e.preventDefault();
     if (!question.trim()) return;
 
-    // Initialize AbortController
     abortControllerRef.current = new AbortController();
-    
     setGeneratingAnswer(true);
     const currentQuestion = question;
     setQuestion(""); 
@@ -79,19 +73,17 @@ function App() {
         message: currentQuestion,
         history: historyContext
       }, {
-        signal: abortControllerRef.current.signal // Attach signal to request
+        signal: abortControllerRef.current.signal
       });
       
       const aiResponse = response.data.reply;
       setChatHistory(prev => [...prev, { type: 'answer', content: aiResponse }]);
-      
     } catch (error) {
       if (axios.isCancel(error)) {
         setChatHistory(prev => [...prev, { type: 'answer', content: "_Generation stopped by user._" }]);
       } else {
         console.error("Error:", error.response?.data || error.message);
-        const errorMessage = "Sorry - Something went wrong connecting to the server.";
-        setChatHistory(prev => [...prev, { type: 'answer', content: errorMessage }]);
+        setChatHistory(prev => [...prev, { type: 'answer', content: "Sorry - Something went wrong connecting to the server." }]);
       }
     } finally {
       setGeneratingAnswer(false);
@@ -103,13 +95,12 @@ function App() {
     <div className={`fixed inset-0 transition-colors duration-500 ${darkMode ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' : 'bg-gradient-to-r from-blue-50 to-blue-100'}`}>
       <div className="h-full max-w-4xl mx-auto flex flex-col p-3 relative">
         
-        {/* Header */}
         <header className="flex items-center justify-between py-4">
-          <a href="https://github.com/ANKVIT26" target="_blank" rel="noopener noreferrer" className="block">
-            <h1 className={`text-4xl font-bold transition-colors ${darkMode ? 'text-cyan-300 hover:text-cyan-400' : 'text-blue-500 hover:text-blue-600'}`}>NodeMesh AI</h1>
+          <a href="https://github.com/ANKVIT26" target="_blank" rel="noopener noreferrer" className="block group">
+            <h1 className={`text-4xl font-bold transition-all duration-300 ${darkMode ? 'text-cyan-300 group-hover:text-cyan-400' : 'text-blue-500 group-hover:text-blue-600'}`}>NodeMesh AI</h1>
           </a>
           <button
-            className={`ml-4 px-4 py-2 rounded-lg font-semibold shadow-md transition-all duration-200 focus:outline-none darkmode-toggle ${darkMode ? 'bg-gray-700 text-cyan-200 hover:bg-gray-600' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
+            className={`ml-4 px-4 py-2 rounded-lg font-semibold shadow-md transition-all duration-200 focus:outline-none ${darkMode ? 'bg-gray-700 text-cyan-200 hover:bg-gray-600' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
             onClick={() => setDarkMode((d) => !d)}
             type="button"
           >
@@ -117,7 +108,6 @@ function App() {
           </button>
         </header>
 
-        {/* Scrollable Chat Container */}
         <div 
           ref={chatContainerRef}
           onScroll={handleScroll}
@@ -127,34 +117,36 @@ function App() {
             <div className="h-full flex flex-col items-center justify-center text-center p-6">
               <div className={`rounded-xl p-8 max-w-2xl shadow-md ${darkMode ? 'bg-gray-900' : 'bg-blue-50'}`}> 
                 <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-cyan-300' : 'text-blue-600'}`}>Welcome to NodeMesh AI! 👋</h2>
-                <p className={`mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}> 
+                <p className={`mb-6 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}> 
                   I'm here to help you with anything you'd like to know.
-                </p><div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-  
-  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
-    <span className="text-blue-500">💡</span> Intent Based 
-  </div>
+                </p>
 
-  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
-    <span className="text-blue-500">🔧</span> Bhagwad Gita Shloks 
-  </div>
-
-  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
-    <span className="text-blue-500">📝</span> General knowledge 
-  </div>
-
-  {/* Card 4: Sarcasm Friendly */}
-  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
-    <span className="text-blue-500">🤔</span> Sarcasm Friendly 
-  </div>
-</div>          ) : (
+                {/* --- WELCOME GRID WITH REFINED HOVER --- */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                  {[
+                    { icon: "💡", label: "Intent Based" },
+                    { icon: "🔧", label: "Bhagwad Gita Shloks" },
+                    { icon: "📝", label: "General knowledge" },
+                    { icon: "🤔", label: "Sarcasm Friendly" }
+                  ].map((card, i) => (
+                    <div 
+                      key={i}
+                      className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 hover:shadow-xl ${
+                        darkMode 
+                        ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700 border border-gray-700' 
+                        : 'bg-white text-blue-700 hover:bg-blue-50 border border-gray-200'
+                      }`}
+                    > 
+                      <span className="mr-2">{card.icon}</span> {card.label} 
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
             <div className="flex flex-col space-y-2">
               {chatHistory.map((chat, index) => (
-                <ChatBubble 
-                  key={index}
-                  message={chat.content}
-                  isUser={chat.type === 'question'}
-                />
+                <ChatBubble key={index} message={chat.content} isUser={chat.type === 'question'} />
               ))}
               {generatingAnswer && (
                 <div className="flex justify-start mt-2 animate-fade-in">
@@ -164,7 +156,6 @@ function App() {
             </div>
           )}
 
-          {/* Jump to Bottom Arrow */}
           {showScrollArrow && (
             <button 
               onClick={scrollToBottom}
@@ -175,7 +166,6 @@ function App() {
           )}
         </div>
 
-        {/* Fixed Input Form */}
         <form onSubmit={generateAnswer} className={`rounded-lg shadow-lg p-4 transition-colors duration-500 ${darkMode ? 'bg-gray-900' : 'bg-white'}`}>
           <div className="flex gap-2 items-center">
             <textarea
@@ -199,9 +189,8 @@ function App() {
                 type="button"
                 onClick={stopGeneration}
                 className="px-4 py-2 bg-red-500 text-white font-bold rounded-md hover:bg-red-600 transition-colors flex items-center justify-center"
-                title="Stop Generating"
               >
-                <div className="w-3 h-3 bg-white rounded-sm"></div> {/* Stop Square icon */}
+                <div className="w-3 h-3 bg-white rounded-sm"></div>
               </button>
             ) : (
               <button
