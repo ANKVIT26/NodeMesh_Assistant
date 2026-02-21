@@ -3,11 +3,11 @@
 NodeMesh is a responsive AI assistant built using **React + Vite** on the frontend and a modular **Node.js/Express.js backend**. It intelligently routes user queries based on intent—leveraging **Gemini Flash 2.0**, **WeatherAPI**, and **NewsAPI** to deliver accurate, real-time responses.
 
 
-## 🚀 Features
+##  Features
 
 - **Sarcasm, Intent-Based Query Handling**  
   Automatically detects user intent or sarcasm across:
-  - `general`/`sarcasm` → Gemini Flash 2.0
+  - `general`/`sarcasm` →  Groq llama-3.3-70b-versatile
   - `weather`, `rain`, `alert` → WeatherMap API
   - `news` → NewsAPI
 
@@ -38,14 +38,14 @@ Prompt engineering is reflected in how each query is structured and routed, ensu
 
 ---
 
-## 📦 Tech Stack
+## Tech Stack
 
-| Layer       | Tools Used                     |
-|-------------|--------------------------------|
-| Frontend    | React, Vite, Tailwind CSS      |
-| Backend     | Node.js, Express               |
-| APIs        | Gemini Flash 2.0, WeatherAPI, NewsAPI |
-| Dev Tools   | Postman, ESLint, dotenv        |
+| Layer       | Tools Used                                         |
+|-------------|--------------------------------                    |
+| Frontend    | React, Vite, Tailwind CSS                          |
+| Backend     | Node.js, Express                                   |
+| APIs        |  Groq llama-3.3-70b-versatile, WeatherAPI, NewsAPI |
+| Dev Tools   | Postman, ESLint, dotenv                            |
 
 ---
 ## Testing the APIs
