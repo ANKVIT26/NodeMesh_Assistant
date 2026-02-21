@@ -129,16 +129,25 @@ function App() {
                 <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-cyan-300' : 'text-blue-600'}`}>Welcome to NodeMesh AI! 👋</h2>
                 <p className={`mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}> 
                   I'm here to help you with anything you'd like to know.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">💡</span> Intent Based </div>
-                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">🔧</span> Bhagwad Gita Shloks </div>
-                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">📝</span> General knowledge </div>
-                  <div className={`p-4 rounded-lg shadow-sm ${darkMode ? 'bg-gray-800 text-cyan-200' : 'bg-white text-blue-700'}`}> <span className="text-blue-500">🤔</span> Sarcasm Friendly </div>
-                </div>
-              </div>
-            </div>
-          ) : (
+                </p><div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+  
+  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
+    <span className="text-blue-500">💡</span> Intent Based 
+  </div>
+
+  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
+    <span className="text-blue-500">🔧</span> Bhagwad Gita Shloks 
+  </div>
+
+  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
+    <span className="text-blue-500">📝</span> General knowledge 
+  </div>
+
+  {/* Card 4: Sarcasm Friendly */}
+  <div className={`p-4 rounded-lg shadow-sm cursor-pointer transition-all duration-300 transform hover:scale-105 hover:shadow-xl hover:-translate-y-1 ${darkMode ? 'bg-gray-800 text-cyan-200 hover:bg-gray-700' : 'bg-white text-blue-700 hover:bg-blue-50'}`}> 
+    <span className="text-blue-500">🤔</span> Sarcasm Friendly 
+  </div>
+</div>          ) : (
             <div className="flex flex-col space-y-2">
               {chatHistory.map((chat, index) => (
                 <ChatBubble 
