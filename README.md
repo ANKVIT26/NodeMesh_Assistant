@@ -28,10 +28,10 @@ NodeMesh is a Stateful Micro-Orchestrator designed to minimize inference latency
 
 ## 🧠 Powered by Gemini Flash 2.0
 
-Gemini Flash 2.0 is used to:
+Groq llama-3.3-70b-versatile is used to:
 - Handle general queries with natural language understanding
-- Summarize external API responses
-- Format answers using markdown, bullet points, or JSON when needed
+- Synthesize Substantive Data: Transforms raw, "ugly" JSON payloads from WeatherAPI and NewsAPI into coherent, contextually rich narratives.
+- Structure Responses: Automatically organizes info using Markdown for style, Bullet Points for lists (like news or activities), and JSON to double-check its own logic.
 
 Prompt engineering is reflected in how each query is structured and routed, ensuring high-quality, context-aware responses.
 
