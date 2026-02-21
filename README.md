@@ -1,7 +1,6 @@
 # 🤖 NodeMesh — AI-Powered Intent-Based Assistant
 
-NodeMesh is a responsive AI assistant built using **React + Vite** on the frontend and a modular **Node.js/Express.js backend**. It intelligently routes user queries based on intent—leveraging ** Groq llama-3.3-70b-versatile**, **WeatherAPI**, and **NewsAPI** to deliver accurate, real-time responses.
-
+NodeMesh is a Stateful Micro-Orchestrator designed to minimize inference latency while maximizing contextual depth through a multi-layered middleware architecture. It transitions from traditional linear request-handling to a concurrent pre-processing pipeline, ensuring that the AI isn't just reacting, but proactively analyzing every interaction.
 
 ##  Features
 
