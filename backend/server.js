@@ -1,109 +1,72 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import axios from 'axios';
 import Groq from 'groq-sdk';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 
 dotenv.config();
-
 const app = express();
-const PORT = process.env.PORT || 3001;
-
-// --- SECURITY MIDDLEWARE ---
-app.use(helmet()); // Sets secure HTTP headers
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per window
-});
-app.use('/chat', limiter);
-
-// --- API INITIALIZATION ---
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const WEATHER_API_KEY = process.env.WEATHER_API_KEY;
 
-// --- SECURE CORS ---
-const allowedOrigins = ['https://nodemesh-ai-frontend.onrender.com', 'http://localhost:5173'];
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error('Not allowed by CORS'));
-  },
-  credentials: true
-}));
+// --- MEMORY STORAGE ---
+const sessionStore = new Map();
+const MAX_HISTORY_TURNS = 6; // Stores last 6 turns (12 messages) 
 
-app.use(express.json());
-
-// --- RESILIENT WEATHER HANDLER ---
-// Added coordinate support and automatic retries to prevent "frequent falls"
-async function handleWeather(location) {
-  if (!WEATHER_API_KEY) return "Weather config missing.";
-  
-  const endpoints = [
-    `https://api.weatherapi.com/v1/current.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(location)}`,
-    `https://api.weatherapi.com/v1/forecast.json?key=${WEATHER_API_KEY}&q=${encodeURIComponent(location)}&days=1`
-  ];
-
-  for (const url of endpoints) {
-    try {
-      const { data } = await axios.get(url, { timeout: 8000 });
-      const { temp_c, condition, humidity } = data.current;
-      return `The weather in ${data.location.name} is ${condition.text} at ${temp_c}°C with ${humidity}% humidity.`;
-    } catch (err) {
-      console.error(`Weather attempt failed: ${err.message}`);
-      // Continue to next endpoint or return error if last
-    }
+function getSessionHistory(sessionId) {
+  if (!sessionStore.has(sessionId)) {
+    sessionStore.set(sessionId, []);
   }
-  return "I'm having trouble reaching the weather service. Please try a specific city name.";
+  return sessionStore.get(sessionId);
 }
 
-// --- UPDATED GROQ CHAT LOGIC ---
-async function handleGeneralResponse(message, history = []) {
+function updateSessionHistory(sessionId, role, content) {
+  const history = getSessionHistory(sessionId);
+  history.push({ role, content });
+  
+  // Maintain sliding window 
+  if (history.length > MAX_HISTORY_TURNS * 2) {
+    sessionStore.set(sessionId, history.slice(-(MAX_HISTORY_TURNS * 2)));
+  }
+}
+
+// --- CHAT HANDLER ---
+async function handleChat(message, sessionId) {
+  const history = getSessionHistory(sessionId);
+  
+  // Determine if the user wants an essay or elaboration
+  const isDetailedRequest = /elaborate|essay|detailed|explain in depth/i.test(message);
+  
+  const systemInstruction = isDetailedRequest 
+    ? "You are a detailed assistant. Provide in-depth explanations or essays as requested."
+    : "You are NodeMesh. Answer in a short, crisp, and concise form. Limit your response to 200 words.";
+
   try {
     const completion = await groq.chat.completions.create({
       messages: [
-        { role: "system", content: "You are NodeMesh, a helpful AI. Be concise." },
+        { role: "system", content: systemInstruction },
         ...history,
         { role: "user", content: message }
       ],
-      model: process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
-      temperature: 0.7,
-      max_tokens: 500,
+      model: "llama-3.3-70b-versatile",
+      max_tokens: isDetailedRequest ? 300 : 150, 
     });
 
-    return completion.choices[0]?.message?.content || "No response generated.";
+    const reply = completion.choices[0]?.message?.content;
+    
+    // Save to memory
+    updateSessionHistory(sessionId, "user", message);
+    updateSessionHistory(sessionId, "assistant", reply);
+
+    return reply;
   } catch (error) {
-    console.error('Groq Error:', error.message);
-    return "AI service is currently busy. Please try again in a moment.";
+    console.error("Groq Error:", error);
+    return "I'm having trouble accessing our previous context. Note: Chats are only stored up to the last 6 messages for context building.";
   }
 }
 
-// --- MAIN CHAT ENDPOINT ---
 app.post('/chat', async (req, res) => {
-  const { message, sessionId } = req.body;
-  if (!message) return res.status(400).json({ error: "Message required" });
-
-  try {
-    // Intent Detection using Groq (Faster & more accurate than regex)
-    const intentPrompt = `Classify intent: "weather", "news", or "general". 
-    If weather, extract location. Format: JSON {"intent": "", "location": ""}. 
-    Message: "${message}"`;
-    
-    const intentResponse = await handleGeneralResponse(intentPrompt);
-    const { intent, location } = JSON.parse(intentResponse.match(/{.*?}/s)[0] || '{"intent":"general"}');
-
-    let reply;
-    if (intent === 'weather') {
-      reply = await handleWeather(location || message);
-    } else {
-      reply = await handleGeneralResponse(message);
-    }
-
-    res.json({ reply, intent });
-  } catch (error) {
-    res.status(500).json({ error: "Processing failed" });
-  }
+  const { message, sessionId = 'default' } = req.body;
+  const reply = await handleChat(message, sessionId);
+  res.json({ reply });
 });
 
-app.listen(PORT, () => console.log(`Secure server on port ${PORT}`));
+app.listen(process.env.PORT || 3001);
