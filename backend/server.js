@@ -54,7 +54,7 @@ function updateSessionHistory(sessionId, role, content) {
   }
 }
 
-// --- SUBSTANTIVE WEATHER HANDLER ---
+
 async function handleWeather(location) {
   if (!WEATHER_API_KEY) return '⚠️ **WARNING: Weather API Key is missing!**';
   try {
@@ -62,30 +62,57 @@ async function handleWeather(location) {
     const { data } = await axios.get(url);
     const loc = data.location;
     const current = data.current;
+    const forecastDay = data.forecast.forecastday[0].day;
     const astro = data.forecast.forecastday[0].astro;
+
+    // --- RAIN DATA EXTRACTION ---
+    const willItRain = forecastDay.daily_will_it_rain; // 1 for yes, 0 for no
+    const rainAmount = forecastDay.totalprecip_mm;    // Total precipitation in mm
+    const rainChance = forecastDay.daily_chance_of_rain;
+
+    // Determine Logic-Based Expectation
+    let expectation = "☀️ **Clear Skies/Sunny Expected**";
+    if (willItRain === 1 || rainAmount > 0) {
+      expectation = `🌧️ **Rain Expected: ${rainAmount}mm total (${rainChance}% chance)**`;
+    }
 
     const localDate = new Date(loc.localtime.replace(' ', 'T'));
     const timeStr = localDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     
     let response = `**Weather for ${loc.name}, ${loc.region}**\n`;
     response += `📅 ${localDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n🕐 Local Time: ${timeStr}\n\n`;
+    response += `**Status:** ${expectation}\n`;
     response += `**Condition:** ${current.condition.text}\n`;
     response += `🌡️ **Temp:** ${current.temp_c}°C (Feels like: ${current.feelslike_c}°C)\n`;
     response += `💧 **Humidity:** ${current.humidity}% | 💨 **Wind:** ${current.wind_kph} km/h ${current.wind_dir}\n`;
     response += `🌅 **Sunrise:** ${astro.sunrise} | 🌇 **Sunset:** ${astro.sunset}`;
 
-    const activityPrompt = `Weather: ${current.condition.text}, ${current.temp_c}°C. Suggest 3 brief activities.`;
+    // --- ENHANCED RECOMMENDATION LOGIC ---
+    const activityPrompt = `
+      Weather Condition: ${current.condition.text}
+      Expectation: ${expectation}
+      Rain Amount: ${rainAmount}mm
+      Temperature: ${current.temp_c}°C
+      
+      Instructions:
+      1. If Rain Amount is 0mm and Will_it_rain is 0: Suggest outdoor activities like visiting monuments, swimming, or fishing.
+      2. If Rain Amount > 0mm or Will_it_rain is 1: Suggest indoor activities like shopping malls, indoor museums, or cozy cafes.
+      Provide 3 brief, engaging points.`;
+
     const activities = await groq.chat.completions.create({
       messages: [{ role: "user", content: activityPrompt }],
       model: "llama-3.1-8b-instant",
     });
-    response += `\n\n**🏃 Smart Activity Recommendations:**\n${activities.choices[0].message.content}`;
+    
+    response += `\n\n**🏃 Smart Recommendations:**\n${activities.choices[0].message.content}`;
 
     return response;
-  } catch (error) { return `⚠️ **WARNING: Could not find weather for "${location}". Check spelling.**`; }
+  } catch (error) { 
+    return `⚠️ **WARNING: Could not find weather for "${location}". Check spelling.**`; 
+  }
 }
 
-// --- CATEGORIZED NEWS (INDIA & US) ---
+
 async function handleNews(originalMessage) {
   if (!NEWS_API_KEY) return '⚠️ **WARNING: News API Key is missing!**';
   
