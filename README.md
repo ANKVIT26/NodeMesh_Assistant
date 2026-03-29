@@ -26,7 +26,7 @@ NodeMesh is a Stateful Micro-Orchestrator designed to minimize inference latency
 
 ---
 
-## 🧠 Powered by Gemini Flash 2.0
+## 🧠 Powered by Groq
 
 Groq llama-3.3-70b-versatile is used to:
 - Handle general queries with natural language understanding
